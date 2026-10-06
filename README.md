@@ -20,8 +20,8 @@ my comment 2
 2. Type your comment in the normal prompt — it is mirrored live under the
    block as you type. Press **Shift+Enter** (or **Ctrl+J**) to save: it is
    drawn under the block (`└ comment`, marker `✎`) and the view stays put.
-   Plain Enter saves too, but Claude Code then scrolls to the bottom — unless
-   you use the tmux binding below.
+   Plain Enter saves too; outside tmux (see below) Claude Code then scrolls to
+   the bottom.
 3. Repeat. All pending comments wait in the prompt box (quotes dimmed); press
    Enter to send them, or add your own text below first.
 
@@ -35,17 +35,19 @@ armed a comment can't hold a line break (the newline saves).
 
 ### tmux: plain Enter without the jump
 
-While a block is armed the plugin sets the tmux pane option `@qr_armed`. With
-this in `~/.tmux.conf` (and `set -g extended-keys on`), Enter is sent as
-Shift+Enter then, so it saves without scrolling:
+Inside tmux this works out of the box. While a block is armed the plugin sets
+the pane option `@qr_armed`, and at session start it binds Enter in the running
+tmux server (your config files are untouched) to send Shift+Enter while that
+flag is set — a save without the scroll:
 
 ```
-bind-key -T root Enter if-shell -F "#{@qr_armed}" { send-keys S-Enter } { send-keys Enter }
+bind-key -T root Enter if-shell -F "#{@qr_armed}" "send-keys S-Enter" "send-keys Enter"
 ```
 
-Not `C-j`: a bare line feed is inserted by Claude Code without reaching the
-plugin. If Claude Code dies with a block armed, clear the flag in that pane with
-`tmux set -p -u @qr_armed`.
+It skips the binding, saying so once in the transcript, when tmux's
+`extended-keys` is off (add `set -g extended-keys on`) or Enter is already bound
+by you. Turn it off with the plugin's **tmuxEnter** setting (`/config`). Not
+`C-j`: a bare line feed is inserted by Claude Code without reaching the plugin.
 
 ## Quote a selection
 

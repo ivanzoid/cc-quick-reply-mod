@@ -1,10 +1,11 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, On } from 'claude-code'
+import type { EngineInterface, On, PluginOptions } from 'claude-code'
 
 import type { Armed, Comment } from '../types'
 import { blockId, composeReply, splitBlocks } from './blocks'
 import { quoteDecorations } from './quote'
 import { isQuoteTrigger, resetLastQuoted, withQuote } from './quote-trigger'
+import { ARMED_OPTION, ENTER_BINDING, tmuxPlan } from './tmux'
 
 const comments = atom({ plugin: 'quick-reply', key: 'comments' } as const, {})
 // The block armed for a comment: the next prompt typed is saved as its comment
@@ -30,16 +31,42 @@ async function saveArmed($: EngineInterface, armed: Armed, quote: string | undef
   await disarm($)
 }
 
-// Mirrors "a block is armed" into the tmux pane option @qr_armed, so a tmux
-// binding can turn Enter into Shift+Enter then: a save without Enter's submit,
-// which scrolls the transcript to its end. Outside tmux, or failing, nothing.
+// Mirrors "a block is armed" into the tmux pane option @qr_armed, so the tmux
+// binding (setUpTmux) turns Enter into Shift+Enter then: a save without
+// Enter's submit, which scrolls the transcript to its end. Outside tmux, or
+// failing, nothing happens.
 async function setTmuxArmed($: EngineInterface, isArmed: boolean) {
   const pane = await $.env.get('TMUX_PANE')
   if (pane === undefined || pane === '') return
   const argv = isArmed
-    ? ['tmux', 'set-option', '-p', '-t', pane, '@qr_armed', '1']
-    : ['tmux', 'set-option', '-p', '-u', '-t', pane, '@qr_armed']
+    ? ['tmux', 'set-option', '-p', '-t', pane, ARMED_OPTION, '1']
+    : ['tmux', 'set-option', '-p', '-u', '-t', pane, ARMED_OPTION]
   await $.process.run(argv, { timeoutMs: 2000 }).catch(() => undefined)
+}
+
+// At session start inside tmux: clear a flag a crashed session left on this
+// pane, then (option tmuxEnter) bind Enter in the running server, never over
+// the person's own Enter binding nor without extended keys. The config files
+// are untouched; the binding lasts until the server ends.
+async function setUpTmux($: EngineInterface, isEnterWanted: boolean) {
+  const pane = await $.env.get('TMUX_PANE')
+  if (pane === undefined || pane === '') return
+  await setTmuxArmed($, false)
+  if (!isEnterWanted) return
+
+  const run = (argv: readonly string[]) =>
+    $.process.run(['tmux', ...argv], { timeoutMs: 2000 }).catch(() => undefined)
+  const keys = await run(['show-options', '-sv', 'extended-keys'])
+  const bound = await run(['list-keys', '-T', 'root', 'Enter'])
+  const plan = tmuxPlan(keys?.stdout ?? '', bound?.exitCode === 0 ? bound.stdout : '')
+
+  if (plan === 'bind') await run(ENTER_BINDING)
+  if (plan === 'no-extended-keys') {
+    $.ui.log('quick-reply: tmux extended-keys is off, so Enter saving a comment scrolls to the end; `set -g extended-keys on` fixes it')
+  }
+  if (plan === 'enter-taken') {
+    $.ui.log('quick-reply: tmux Enter is already bound, left as is; Shift+Enter saves a comment without scrolling')
+  }
 }
 
 const disarm = async ($: EngineInterface) => {
@@ -70,7 +97,13 @@ const pendingText = (list: Comment[]) => (list.length === 0 ? '' : `${composeRep
  * prompt typed is saved as its comment, and the comments wait in the prompt.
  * Also the `>` selection quote, which shares the prompt hooks.
  */
-export function registerInlineComments(on: On) {
+export function registerInlineComments(on: On, options: PluginOptions) {
+  on('session.start', async ($, e, next) => {
+    await setUpTmux($, options.tmuxEnter !== false)
+
+    return next(e)
+  })
+
   // Quotes by block id, for blocks drawn this session: the armed id's quote
   // is read from here when the comment is saved.
   const quotes = new Map<string, string>()
