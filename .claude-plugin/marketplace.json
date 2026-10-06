@@ -1,5 +1,6 @@
 {
-  "name": "quote-reply",
+  "name": "quick-reply",
+  "description": "Claude Code mod: reply to selected parts of an agent answer as > quotes",
   "owner": { "name": "ivanzoid" },
-  "plugins": [{ "name": "quote-reply", "source": "./" }]
+  "plugins": [{ "name": "quick-reply", "source": "./" }]
 }

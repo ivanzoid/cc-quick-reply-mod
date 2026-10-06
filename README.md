@@ -1,4 +1,4 @@
-# quote-reply
+# quick-reply
 
 Claude Code mod: reply to specific parts of an agent answer.
 
@@ -20,7 +20,7 @@ my comment 2
 ## Install
 
 ```
-/plugin install quote-reply --marketplace ivanzoid/claude-quote-reply
+/plugin install quick-reply --marketplace ivanzoid/cc-quick-reply-mod
 ```
 
 Answer `y` to add the marketplace, then pick the user scope.
