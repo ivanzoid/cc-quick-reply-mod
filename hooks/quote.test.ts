@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { appendQuote, atEmptyLine, quoteBlock, quoteDecorations } from './quote'
+import { atEmptyLine, quoteBlock, quoteDecorations } from './quote'
 
 test('triggers only on an empty line', () => {
   expect(atEmptyLine('', 0)).toBe(true)
@@ -27,21 +27,4 @@ test('decorates quote lines only', () => {
     { start: 0, end: 3, dimColor: true, italic: true },
     { start: 10, end: 14, dimColor: true, italic: true },
   ])
-})
-
-test('appendQuote puts the block on its own line, apart from a reply', () => {
-  expect(appendQuote('', 'a')).toEqual({ text: '> a\n', block: '> a\n' })
-  expect(appendQuote('> a\nmy comment', 'b')).toEqual({
-    text: '> a\nmy comment\n\n> b\n',
-    block: '\n\n> b\n',
-  })
-})
-
-test('appendQuote swaps the block a paused drag left behind', () => {
-  const first = appendQuote('> a\nok\n', 'hel')
-  expect(first.block).toBe('\n> hel\n')
-  expect(appendQuote(first.text, 'hello', first.block).text).toBe('> a\nok\n\n> hello\n')
-  expect(appendQuote(`${first.text}typed`, 'hello', first.block).text).toBe(
-    `${first.text}typed\n\n> hello\n`,
-  )
 })

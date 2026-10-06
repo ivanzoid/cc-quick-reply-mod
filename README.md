@@ -17,14 +17,6 @@ my comment 2
 
 `>` on a non-empty line, with nothing selected, or a second time with the same selection inserts a plain `>`.
 
-## Auto mode
-
-`/qr` toggles auto mode (status line shows `❝ auto-quote`): every selection you
-finish in the transcript is appended to the prompt as a quote, no `>` needed.
-Claude Code tells plugins neither when the mouse is released nor when it
-copies the selection, so "finished" means the selection stayed the same for
-~0.45 s; if a slow drag pauses and then grows, the quote it left is replaced.
-
 ## Install
 
 ```

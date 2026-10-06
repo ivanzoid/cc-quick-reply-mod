@@ -40,24 +40,3 @@ export function quoteDecorations(text: string): PromptDecoration[] {
 
   return runs
 }
-
-/**
- * The draft with the selection's quote block added at its end, on a line of
- * its own. When the draft still ends with `replacing` (the block auto mode put
- * there a moment ago, from a drag that paused and went on), that block is
- * swapped for the new one instead of a second block being added.
- */
-export function appendQuote(
-  draft: string,
-  selected: string,
-  replacing?: string,
-): { text: string; block: string } {
-  const base =
-    replacing !== undefined && replacing !== '' && draft.endsWith(replacing)
-      ? draft.slice(0, draft.length - replacing.length)
-      : draft
-  const head = base === '' || base.endsWith('\n') ? base : `${base}\n`
-  const text = head + quoteBlock(selected, head)
-
-  return { text, block: text.slice(base.length) }
-}
