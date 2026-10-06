@@ -44,10 +44,24 @@ flag is set — a save without the scroll:
 bind-key -T root Enter if-shell -F "#{@qr_armed}" "send-keys S-Enter" "send-keys Enter"
 ```
 
-It skips the binding, saying so once in the transcript, when tmux's
-`extended-keys` is off (add `set -g extended-keys on`) or Enter is already bound
-by you. Turn it off with the plugin's **tmuxEnter** setting (`/config`). Not
-`C-j`: a bare line feed is inserted by Claude Code without reaching the plugin.
+At session start (inside tmux only) the plugin also clears a `@qr_armed` left on
+its pane by a session that died with a block armed, then decides:
+
+| Your tmux | What the plugin does |
+| --- | --- |
+| `extended-keys on` (or `always`), Enter unbound | binds Enter as above |
+| Enter already bound to this binding | leaves it as is |
+| Enter bound by you to something else | leaves yours alone, says so once in the transcript |
+| `extended-keys off` | doesn't bind (tmux couldn't send a Shift+Enter Claude Code tells from Enter); says so once, suggesting `set -g extended-keys on` |
+
+Without the binding, Shift+Enter still saves without the jump; plain Enter saves
+with it. What each row does to the binding was checked against a real tmux 3.6
+server (the transcript notes only show in an interactive session). Turn the
+binding off with the plugin's **tmuxEnter** setting (`/config`); the binding
+lives in the server's memory, so it is gone after a tmux restart.
+
+Not `C-j`: a bare line feed is inserted by Claude Code without reaching the
+plugin.
 
 ## Quote a selection
 
