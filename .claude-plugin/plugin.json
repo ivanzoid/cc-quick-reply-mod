@@ -1,6 +1,6 @@
 {
   "name": "quick-reply",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Reply to parts of an answer: comment on blocks inline, or quote a selection with > on an empty prompt line",
   "types": "./types/index.d.ts",
   "author": { "name": "ivanzoid" }

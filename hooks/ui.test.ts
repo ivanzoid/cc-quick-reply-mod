@@ -11,6 +11,14 @@ for (const surface of ['terminal', 'desktop'] as const) {
       return { isFilled: true }
     })
     const clock = mock.clock(on)
+    mock.env(on, { TMUX_PANE: '%7' })
+    const tmux: string[] = []
+    on('process.run', ($, e) => {
+      tmux.push(e.argv.join(' '))
+      return {
+        value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false },
+      }
+    })
     const msg = await $.ui.mount({
       plugin: 'quick-reply',
       surface,
@@ -23,6 +31,10 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await msg.press({ key: `c:${blockId('Second para.')}` })
     const r = await $.prompt.submit({ text: 'my note', origin: { kind: 'composer' }, wait: false })
     expect(r.drop).toContain('comment saved')
+    expect(tmux).toEqual([
+      'tmux set-option -p -t %7 @qr_armed 1',
+      'tmux set-option -p -u -t %7 @qr_armed',
+    ])
     await clock.advance(100)
     expect(box).toBe('> Second para.\nmy note\n\n')
     expect((await msg.find({ type: 'Text', text: /my note/ }))?.text).toBe('└ my note')

@@ -30,9 +30,22 @@ async function saveArmed($: EngineInterface, armed: Armed, quote: string | undef
   await disarm($)
 }
 
+// Mirrors "a block is armed" into the tmux pane option @qr_armed, so a tmux
+// binding can turn Enter into Shift+Enter then: a save without Enter's submit,
+// which scrolls the transcript to its end. Outside tmux, or failing, nothing.
+async function setTmuxArmed($: EngineInterface, isArmed: boolean) {
+  const pane = await $.env.get('TMUX_PANE')
+  if (pane === undefined || pane === '') return
+  const argv = isArmed
+    ? ['tmux', 'set-option', '-p', '-t', pane, '@qr_armed', '1']
+    : ['tmux', 'set-option', '-p', '-u', '-t', pane, '@qr_armed']
+  await $.process.run(argv, { timeoutMs: 2000 }).catch(() => undefined)
+}
+
 const disarm = async ($: EngineInterface) => {
   await update($, editing, () => null)
   await update($, draft, () => '')
+  await setTmuxArmed($, false)
 }
 
 const firstLine = (text: string, max = 50) => {
@@ -95,6 +108,7 @@ export function registerInlineComments(on: On) {
                   return
                 }
                 await update($, editing, () => ({ id, label: firstLine(block) }))
+                await setTmuxArmed($, true)
                 await update($, draft, () => comment?.text ?? '')
                 await $.prompt.fill({ text: comment?.text ?? '' })
               }}

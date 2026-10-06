@@ -20,7 +20,8 @@ my comment 2
 2. Type your comment in the normal prompt — it is mirrored live under the
    block as you type. Press **Shift+Enter** (or **Ctrl+J**) to save: it is
    drawn under the block (`└ comment`, marker `✎`) and the view stays put.
-   Plain Enter saves too, but Claude Code then scrolls to the bottom.
+   Plain Enter saves too, but Claude Code then scrolls to the bottom — unless
+   you use the tmux binding below.
 3. Repeat. All pending comments wait in the prompt box (quotes dimmed); press
    Enter to send them, or add your own text below first.
 
@@ -31,6 +32,20 @@ Notes: the plugin draws assistant replies itself (to put markers in the
 gutter), so their layout may differ slightly from Claude Code's own. Comments
 are tied to a block's text, so identical blocks share one; while a block is
 armed a comment can't hold a line break (the newline saves).
+
+### tmux: plain Enter without the jump
+
+While a block is armed the plugin sets the tmux pane option `@qr_armed`. With
+this in `~/.tmux.conf` (and `set -g extended-keys on`), Enter is sent as
+Shift+Enter then, so it saves without scrolling:
+
+```
+bind-key -T root Enter if-shell -F "#{@qr_armed}" { send-keys S-Enter } { send-keys Enter }
+```
+
+Not `C-j`: a bare line feed is inserted by Claude Code without reaching the
+plugin. If Claude Code dies with a block armed, clear the flag in that pane with
+`tmux set -p -u @qr_armed`.
 
 ## Quote a selection
 
