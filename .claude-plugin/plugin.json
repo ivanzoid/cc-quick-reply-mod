@@ -1,0 +1,6 @@
+{
+  "name": "quote-reply",
+  "version": "0.1.0",
+  "description": "Select text in the transcript, type > on an empty prompt line to quote it, then write your reply under it",
+  "author": { "name": "ivanzoid" }
+}

@@ -1,0 +1,5 @@
+{
+  "name": "quote-reply",
+  "owner": { "name": "ivanzoid" },
+  "plugins": [{ "name": "quote-reply", "source": "./" }]
+}
