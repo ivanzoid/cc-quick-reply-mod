@@ -1,0 +1,59 @@
+import type { Comment } from '../types'
+
+const ITEM = /^(?:[-*+] |\d+[.)] |#{1,6} |> )/
+
+/**
+ * Splits a reply's markdown into the blocks a comment can attach to:
+ * paragraphs, top-level list items, headings, and fenced code blocks whole.
+ */
+export function splitBlocks(markdown: string): string[] {
+  const blocks: string[] = []
+  let current: string[] = []
+  let fence: string | undefined
+  const flush = () => {
+    if (current.length > 0) blocks.push(current.join('\n'))
+    current = []
+  }
+
+  for (const line of markdown.split('\n')) {
+    const marker = /^\s*(```+|~~~+)/.exec(line)?.[1]
+    if (fence !== undefined) {
+      current.push(line)
+      if (marker !== undefined && marker.startsWith(fence)) {
+        fence = undefined
+        flush()
+      }
+      continue
+    }
+    if (marker !== undefined) {
+      flush()
+      fence = marker
+      current.push(line)
+      continue
+    }
+    if (line.trim() === '') {
+      flush()
+      continue
+    }
+    if (ITEM.test(line)) flush()
+    current.push(line)
+  }
+  flush()
+
+  return blocks
+}
+
+/** The prompt the comments make: each quoted block, its comment under it. */
+export function composeReply(comments: readonly Comment[]): string {
+  return comments
+    .map(({ quote, text }) => {
+      const quoted = quote
+        .split('\n')
+        .map(line => (line.trim() === '' ? '>' : `> ${line.trimEnd()}`))
+        .join('\n')
+
+      return `${quoted}\n${text}`
+    })
+    .join('\n\n')
+}
+
