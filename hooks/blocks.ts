@@ -57,3 +57,14 @@ export function composeReply(comments: readonly Comment[]): string {
     .join('\n\n')
 }
 
+
+/**
+ * A block's id: a hash of its text. The engine may draw a reply again under
+ * another requestId, so ids made from it would orphan the comments made.
+ */
+export function blockId(block: string): string {
+  let h = 5381
+  for (let i = 0; i < block.length; i++) h = ((h * 33) ^ block.charCodeAt(i)) >>> 0
+
+  return `${h.toString(36)}${block.length.toString(36)}`
+}

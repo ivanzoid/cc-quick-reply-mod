@@ -1,15 +1,39 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, On } from 'claude-code'
 
-import type { Comment } from '../types'
-import { composeReply, splitBlocks } from './blocks'
+import type { Armed, Comment } from '../types'
+import { blockId, composeReply, splitBlocks } from './blocks'
 import { quoteDecorations } from './quote'
-import { resetLastQuoted } from './quote-trigger'
+import { isQuoteTrigger, resetLastQuoted, withQuote } from './quote-trigger'
 
 const comments = atom({ plugin: 'quick-reply', key: 'comments' } as const, {})
 // The block armed for a comment: the next prompt typed is saved as its comment
 // instead of being sent. (A field inside a transcript row never gets the keys.)
 const editing = atom({ plugin: 'quick-reply', key: 'editing' } as const, null)
+// The prompt's text while a block is armed, drawn live under that block.
+const draft = atom({ plugin: 'quick-reply', key: 'draft' } as const, '')
+
+/** Mirrors the prompt under the armed block as it is typed; no-op otherwise. */
+async function mirrorDraft($: EngineInterface, text: string) {
+  if ((await read($, editing)) === null) return
+  await update($, draft, () => text)
+}
+
+// Saves `text` as the armed block's comment (empty removes it) and disarms.
+async function saveArmed($: EngineInterface, armed: Armed, quote: string | undefined, text: string) {
+  await update($, comments, cur => {
+    const { [armed.id]: _, ...rest } = cur
+    const q = quote ?? cur[armed.id]?.quote
+
+    return text === '' || q === undefined ? rest : { ...rest, [armed.id]: { quote: q, text } }
+  })
+  await disarm($)
+}
+
+const disarm = async ($: EngineInterface) => {
+  await update($, editing, () => null)
+  await update($, draft, () => '')
+}
 
 const firstLine = (text: string, max = 50) => {
   const line = (text.split('\n')[0] ?? '').replace(/^[-*+#>\s]+|^\d+[.)]\s+/, '')
@@ -20,15 +44,18 @@ const firstLine = (text: string, max = 50) => {
 // Puts the pending comments in the prompt box, ready to send with Enter, the
 // caret below them for text of one's own. Run after the box was cleared.
 async function showPending($: EngineInterface) {
-  const list: Comment[] = Object.values(await read($, comments))
-  if (list.length === 0) return
-  const text = `${composeReply(list)}\n\n`
+  const text = pendingText(Object.values(await read($, comments)))
+  if (text === '') return
   await $.prompt.fill({ text, decorations: quoteDecorations(text) })
 }
+
+// The pending comments as the prompt box holds them, the caret's line below.
+const pendingText = (list: Comment[]) => (list.length === 0 ? '' : `${composeReply(list)}\n\n`)
 
 /**
  * Inline comments: a marker beside each block of a reply arms it, the next
  * prompt typed is saved as its comment, and the comments wait in the prompt.
+ * Also the `>` selection quote, which shares the prompt hooks.
  */
 export function registerInlineComments(on: On) {
   // Quotes by block id, for blocks drawn this session: the armed id's quote
@@ -43,11 +70,12 @@ export function registerInlineComments(on: On) {
     const { Box, Button, Markdown, Text } = $.ui.resolve(e)
     const all = await read($, comments)
     const armed = await read($, editing)
+    const typed = await read($, draft)
 
     return (
       <Box flexDirection="column">
         {blocks.map((block, i) => {
-          const id = `${e.requestId}:${i}`
+          const id = blockId(block)
           quotes.set(id, block)
           const comment = all[id]
           const isArmed = armed?.id === id
@@ -61,11 +89,13 @@ export function registerInlineComments(on: On) {
               dimColor={label === '+'}
               onPress={async () => {
                 if (isArmed) {
-                  await update($, editing, () => null)
+                  await disarm($)
+                  await $.prompt.fill({ text: '' })
                   await showPending($)
                   return
                 }
                 await update($, editing, () => ({ id, label: firstLine(block) }))
+                await update($, draft, () => comment?.text ?? '')
                 await $.prompt.fill({ text: comment?.text ?? '' })
               }}
             />
@@ -93,16 +123,50 @@ export function registerInlineComments(on: On) {
                   <Markdown text={block} />
                 </Box>
               </Box>
-              {comment && (
+              {isArmed ? (
                 <Box marginLeft={2}>
-                  <Text color="warning">{`└ ${comment.text}`}</Text>
+                  {typed.trim() === '' ? (
+                    <Text dimColor italic>└ type your comment in the prompt; Shift+Enter or Ctrl+J saves</Text>
+                  ) : (
+                    <Text color="warning" italic>{`└ ${typed}▏`}</Text>
+                  )}
                 </Box>
+              ) : (
+                comment && (
+                  <Box marginLeft={2}>
+                    <Text color="warning">{`└ ${comment.text}`}</Text>
+                  </Box>
+                )
               )}
             </Box>
           )
         })}
       </Box>
     )
+  })
+
+  // The plugin's one prompt.edit hook: a `>` on an empty line quotes the
+  // mouse selection; while a block is armed the draft is mirrored under it and
+  // a newline (Shift+Enter, Ctrl+J) saves it: an edit, unlike
+  // Enter's submit, leaves the transcript where it is. Quote lines draw dim.
+  on('prompt.edit', async ($, e, next) => {
+    const armed = await read($, editing)
+    const isNewline =
+      e.inputText !== '' && e.inputText.trim() === '' && /[\r\n]/.test(e.inputText)
+    if (armed && isNewline) {
+      await saveArmed($, armed, quotes.get(armed.id), e.text.trim())
+      // A box answered here with the comments in it did not show them until
+      // Enter (seen live); consume the key with an empty box, then fill it.
+      $.clock.after(50, () => void showPending($))
+
+      return { text: '', cursor: 0 }
+    }
+
+    const edit = isQuoteTrigger(e) ? withQuote(e, (await $.ui.selection())?.text) : e
+    const r = await next(edit)
+    await mirrorDraft($, r.text)
+
+    return { ...r, decorations: [...(r.decorations ?? []), ...quoteDecorations(r.text)] }
   })
 
   on('prompt.submit', async ($, e, next) => {
@@ -122,15 +186,9 @@ export function registerInlineComments(on: On) {
       return next({ ...e, text })
     }
 
-    const text = e.text.trim()
-    await update($, comments, cur => {
-      const { [armed.id]: _, ...rest } = cur
-      const quote = quotes.get(armed.id) ?? cur[armed.id]?.quote
-
-      return text === '' || quote === undefined ? rest : { ...rest, [armed.id]: { quote, text } }
-    })
-    await update($, editing, () => null)
+    await saveArmed($, armed, quotes.get(armed.id), e.text.trim())
     // The engine empties the box once the drop is answered; refill after it.
+    // (Enter also scrolls the transcript to its end, which no hook can undo.)
     $.clock.after(50, () => void showPending($))
 
     return { drop: `comment saved on «${armed.label}» (not sent)` }
@@ -145,21 +203,23 @@ export function registerInlineComments(on: On) {
     const { Box, Button, Text } = $.ui.resolve(e)
     const clear = async () => {
       await update($, comments, () => ({}))
-      await update($, editing, () => null)
+      await disarm($)
     }
 
     return (
       <Box flexDirection="column">
         {armed && (
           <Box flexDirection="row" gap={1}>
-            <Text color="warning">{`✎ commenting on «${armed.label}» — type below, Enter saves`}</Text>
+            <Text color="warning">{`✎ commenting on «${armed.label}» — type it, Shift+Enter or Ctrl+J saves`}</Text>
             {all[armed.id] && (
               <Button
                 key="remove"
                 label="Remove"
                 onPress={async () => {
                   await update($, comments, ({ [armed.id]: _, ...rest }) => rest)
-                  await update($, editing, () => null)
+                  await disarm($)
+                  await $.prompt.fill({ text: '' })
+                  await showPending($)
                 }}
               />
             )}
@@ -167,7 +227,7 @@ export function registerInlineComments(on: On) {
               key="cancel"
               label="Cancel"
               onPress={async () => {
-                await update($, editing, () => null)
+                await disarm($)
                 await $.prompt.fill({ text: '' })
                 await showPending($)
               }}

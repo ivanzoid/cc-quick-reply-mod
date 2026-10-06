@@ -1,5 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 
+import { blockId } from './blocks'
+
 for (const surface of ['terminal', 'desktop'] as const) {
   test(`${surface}: arm a block, the next prompt becomes its comment`, async ($, on) => {
     on('prompt.submit', ($, e) => ({ text: e.text }))
@@ -18,12 +20,22 @@ for (const surface of ['terminal', 'desktop'] as const) {
     })
     expect(await msg.findAll({ type: 'Button' })).toHaveLength(2)
 
-    await msg.press({ key: 'c:m1:1' })
+    await msg.press({ key: `c:${blockId('Second para.')}` })
     const r = await $.prompt.submit({ text: 'my note', origin: { kind: 'composer' }, wait: false })
     expect(r.drop).toContain('comment saved')
     await clock.advance(100)
     expect(box).toBe('> Second para.\nmy note\n\n')
     expect((await msg.find({ type: 'Text', text: /my note/ }))?.text).toBe('└ my note')
+
+    // The engine may draw the same reply again under another requestId.
+    const again = await $.ui.mount({
+      plugin: 'quick-reply',
+      surface,
+      component: 'AssistantMessage',
+      requestId: 'm1-redrawn',
+      props: { text: 'First para.\n\nSecond para.', isFirstOfReply: true },
+    })
+    expect((await again.find({ type: 'Text', text: /my note/ }))?.text).toBe('└ my note')
 
     const band = await $.ui.mount({
       plugin: 'quick-reply',

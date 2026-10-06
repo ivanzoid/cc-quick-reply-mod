@@ -8,6 +8,8 @@ declare module 'claude-code' {
       comments: Record<string, Comment>
       /** The block the next typed prompt comments on, or null. */
       editing: Armed | null
+      /** The prompt's text while a block is armed, mirrored under it. */
+      draft: string
     }
   }
 }

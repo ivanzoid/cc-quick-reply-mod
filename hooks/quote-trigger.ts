@@ -1,6 +1,6 @@
-import type { On } from 'claude-code'
+import type { PromptEditInput } from 'claude-code'
 
-import { atEmptyLine, quoteBlock, quoteDecorations } from './quote'
+import { atEmptyLine, quoteBlock } from './quote'
 
 // The selection last turned into a quote: typing `>` again with the same
 // selection still held inserts a plain `>`.
@@ -11,26 +11,19 @@ export function resetLastQuoted() {
   lastQuoted = undefined
 }
 
-/** Typing `>` on an empty prompt line quotes the mouse selection there. */
-export function registerQuoteTrigger(on: On) {
-  on('prompt.edit', async ($, e, next) => {
-    const isTrigger =
-      e.inputText === '>' && e.start === e.end && atEmptyLine(e.text, e.start)
+/** Whether the edit is a `>` typed on an empty prompt line. */
+export function isQuoteTrigger(e: PromptEditInput): boolean {
+  return e.inputText === '>' && e.start === e.end && atEmptyLine(e.text, e.start)
+}
 
-    if (isTrigger) {
-      const selected = await $.ui.selection()
-      const block = selected && quoteBlock(selected.text, e.text.slice(0, e.start))
-      if (block && selected.text !== lastQuoted) {
-        lastQuoted = selected.text
-        const r = await next({ ...e, inputText: block })
+/**
+ * The trigger edit with the mouse selection put in as a quote block; the edit
+ * as it came when nothing is selected or that selection was just quoted.
+ */
+export function withQuote(e: PromptEditInput, selected: string | undefined): PromptEditInput {
+  const block = selected === undefined ? '' : quoteBlock(selected, e.text.slice(0, e.start))
+  if (block === '' || selected === lastQuoted) return e
+  lastQuoted = selected
 
-        return { ...r, decorations: quoteDecorations(r.text) }
-      }
-    }
-
-    const r = await next(e)
-
-    return { ...r, decorations: [...(r.decorations ?? []), ...quoteDecorations(r.text)] }
-  })
-
+  return { ...e, inputText: block }
 }
