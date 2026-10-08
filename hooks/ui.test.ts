@@ -10,6 +10,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
       box = e.text
       return { isFilled: true }
     })
+    on('prompt.read', () => ({ value: { text: box, cursor: box.length } }))
     const clock = mock.clock(on)
     mock.env(on, { TMUX_PANE: '%7' })
     const tmux: string[] = []
@@ -78,3 +79,34 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(later.text).toBe('normal prompt')
   })
 }
+
+test('a > quote in the box survives arming a block, saving and cancelling', async ($, on) => {
+  on('prompt.submit', ($, e) => ({ text: e.text }))
+  let box = '> Alpha.\nquote note\n'
+  on('prompt.fill', ($, e) => {
+    box = e.text
+    return { isFilled: true }
+  })
+  on('prompt.read', () => ({ value: { text: box, cursor: box.length } }))
+  const clock = mock.clock(on)
+  mock.env(on, {})
+  const msg = await $.ui.mount({
+    plugin: 'quick-reply',
+    surface: 'terminal',
+    component: 'AssistantMessage',
+    requestId: 'm1',
+    props: { text: 'Alpha.\n\nSecond para.\n\nThird para.', isFirstOfReply: true },
+  })
+
+  await msg.press({ key: `c:${blockId('Second para.')}` })
+  expect(box).toBe('')
+  await $.prompt.submit({ text: 'my note', origin: { kind: 'composer' }, wait: false })
+  await clock.advance(100)
+  expect(box).toBe('> Second para.\nmy note\n\n> Alpha.\nquote note\n')
+
+  // Arm another block, cancel: the box is as it was.
+  await msg.press({ key: `c:${blockId('Third para.')}` })
+  expect(box).toBe('')
+  await msg.press({ key: `c:${blockId('Third para.')}` })
+  expect(box).toBe('> Second para.\nmy note\n\n> Alpha.\nquote note\n')
+})

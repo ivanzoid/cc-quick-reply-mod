@@ -13,6 +13,9 @@ const comments = atom({ plugin: 'quick-reply', key: 'comments' } as const, {})
 const editing = atom({ plugin: 'quick-reply', key: 'editing' } as const, null)
 // The prompt's text while a block is armed, drawn live under that block.
 const draft = atom({ plugin: 'quick-reply', key: 'draft' } as const, '')
+// The prompt's own text (a `>` quote, a reply begun) set aside while a block is
+// armed, put back below the pending comments once it is saved or cancelled.
+const held = atom({ plugin: 'quick-reply', key: 'held' } as const, '')
 
 /** Mirrors the prompt under the armed block as it is typed; no-op otherwise. */
 async function mirrorDraft($: EngineInterface, text: string) {
@@ -81,16 +84,23 @@ const firstLine = (text: string, max = 50) => {
   return line.length > max ? `${line.slice(0, max - 1)}…` : line
 }
 
-// Puts the pending comments in the prompt box, ready to send with Enter, the
-// caret below them for text of one's own. Run after the box was cleared.
+// Puts the pending comments in the prompt box, ready to send with Enter, and
+// below them the text set aside when the block was armed (or the caret's line).
 async function showPending($: EngineInterface) {
-  const text = pendingText(Object.values(await read($, comments)))
-  if (text === '') return
+  const text = pendingText(Object.values(await read($, comments))) + (await read($, held))
+  await update($, held, () => '')
   await $.prompt.fill({ text, decorations: quoteDecorations(text) })
 }
 
 // The pending comments as the prompt box holds them, the caret's line below.
 const pendingText = (list: Comment[]) => (list.length === 0 ? '' : `${composeReply(list)}\n\n`)
+
+/** The box's text other than the pending comments showPending put at its head. */
+export function ownText(box: string, list: Comment[]): string {
+  const reply = list.length === 0 ? '' : composeReply(list)
+
+  return reply !== '' && box.startsWith(reply) ? box.slice(reply.length).replace(/^\n+/, '') : box
+}
 
 /**
  * Inline comments: a marker beside each block of a reply arms it, the next
@@ -136,9 +146,14 @@ export function registerInlineComments(on: On, options: PluginOptions) {
               onPress={async () => {
                 if (isArmed) {
                   await disarm($)
-                  await $.prompt.fill({ text: '' })
                   await showPending($)
                   return
+                }
+                // Arming over another armed block drops that one's draft only.
+                if ((await read($, editing)) === null) {
+                  const box = (await $.prompt.read()).text
+                  const list = Object.values(await read($, comments))
+                  await update($, held, () => ownText(box, list))
                 }
                 await update($, editing, () => ({ id, label: firstLine(block) }))
                 await setTmuxArmed($, true)
@@ -248,9 +263,13 @@ export function registerInlineComments(on: On, options: PluginOptions) {
     if (e.props.hasSurvey || (list.length === 0 && !armed)) return next(e)
 
     const { Box, Button, Text } = $.ui.resolve(e)
+    // Drops the comments, keeping the box's own text (set aside, if armed).
     const clear = async () => {
+      const own = armed ? await read($, held) : ownText((await $.prompt.read()).text, list)
       await update($, comments, () => ({}))
       await disarm($)
+      await update($, held, () => '')
+      await $.prompt.fill({ text: own, decorations: quoteDecorations(own) })
     }
 
     return (
@@ -265,7 +284,6 @@ export function registerInlineComments(on: On, options: PluginOptions) {
                 onPress={async () => {
                   await update($, comments, ({ [armed.id]: _, ...rest }) => rest)
                   await disarm($)
-                  await $.prompt.fill({ text: '' })
                   await showPending($)
                 }}
               />
@@ -275,7 +293,6 @@ export function registerInlineComments(on: On, options: PluginOptions) {
               label="Cancel"
               onPress={async () => {
                 await disarm($)
-                await $.prompt.fill({ text: '' })
                 await showPending($)
               }}
             />
@@ -289,7 +306,6 @@ export function registerInlineComments(on: On, options: PluginOptions) {
               label="Clear"
               onPress={async () => {
                 await clear()
-                await $.prompt.fill({ text: '' })
               }}
             />
           </Box>

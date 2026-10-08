@@ -25,6 +25,9 @@ my comment 2
 3. Repeat. All pending comments wait in the prompt box (quotes dimmed); press
    Enter to send them, or add your own text below first.
 
+Text already in the prompt (a `>` quote, see below) is set aside while a block
+is armed and comes back below the comments once it is saved or cancelled.
+
 Click `✎` to edit a comment, `▶` or **Cancel** to disarm, **Remove** to delete
 the armed block's comment, **Clear** in the band to drop them all.
 

@@ -10,6 +10,8 @@ declare module 'claude-code' {
       editing: Armed | null
       /** The prompt's text while a block is armed, mirrored under it. */
       draft: string
+      /** The prompt's own text set aside while a block is armed. */
+      held: string
     }
   }
 }
